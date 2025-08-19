@@ -1,0 +1,563 @@
+openapi: 3.0.3
+info:
+  title: Coco-Pik Backend API
+  description: Simple group wishlist API - like Airbnb wishlist but for 3D models
+  version: 1.0.0
+  contact:
+    name: Coco-Pik API Support
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:8787
+    description: Local development server
+  - url: https://coco-pik-backend.your-domain.workers.dev
+    description: Production server
+
+paths:
+  /:
+    get:
+      summary: Get API information
+      description: Returns basic information about the API including version and available endpoints
+      operationId: getApiInfo
+      responses:
+        '200':
+          description: API information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Coco-Pik Backend API"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  description:
+                    type: string
+                    example: "Simple group wishlist API - like Airbnb wishlist but for 3D models"
+                  endpoints:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    example:
+                      "POST /api/groups": "Create a new group with invitation link"
+                      "GET /api/groups/:code": "Get group details by invitation code"
+
+  /api/groups:
+    post:
+      summary: Create a new group
+      description: Creates a new group with an invitation link for sharing 3D models
+      operationId: createGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+            examples:
+              full:
+                summary: Group with all optional fields
+                value:
+                  deviceToken: "test-device-123"
+                  modelId: "model-xyz-789"
+                  title: "My First Group"
+                  description: "Testing group creation"
+                  expirationHours: 24
+              minimal:
+                summary: Group with only required fields
+                value:
+                  deviceToken: "test-device-999"
+                  modelId: "simple-model-123"
+      responses:
+        '201':
+          description: Group created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateGroupResponse'
+        '400':
+          description: Bad request - missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "deviceToken and modelId are required"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    options:
+      summary: CORS preflight
+      description: Handles CORS preflight requests
+      operationId: groupsCors
+      responses:
+        '200':
+          description: CORS headers returned
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "*"
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+                example: "GET, POST, PUT, DELETE, OPTIONS"
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+                example: "Content-Type, Authorization"
+
+  /api/groups/{inviteCode}:
+    get:
+      summary: Get group details
+      description: Retrieves group information by invitation code
+      operationId: getGroup
+      parameters:
+        - name: inviteCode
+          in: path
+          required: true
+          description: The invitation code for the group
+          schema:
+            type: string
+            pattern: '^[a-z0-9]{8}$'
+            example: "35ihvv61"
+      responses:
+        '200':
+          description: Group details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetails'
+        '404':
+          description: Group not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Group not found"
+        '410':
+          description: Group invitation has expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Group invitation has expired"
+
+  /api/groups/{inviteCode}/join:
+    post:
+      summary: Join a group
+      description: Allows a user to join an existing group using the invitation code
+      operationId: joinGroup
+      parameters:
+        - name: inviteCode
+          in: path
+          required: true
+          description: The invitation code for the group
+          schema:
+            type: string
+            pattern: '^[a-z0-9]{8}$'
+            example: "35ihvv61"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinGroupRequest'
+            example:
+              deviceToken: "test-device-456"
+      responses:
+        '200':
+          description: Successfully joined the group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinGroupResponse'
+        '400':
+          description: Bad request - missing deviceToken or user already a member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_token:
+                  summary: Missing device token
+                  value:
+                    error: "deviceToken is required"
+                already_member:
+                  summary: User already a member
+                  value:
+                    error: "User is already a member of this group"
+        '404':
+          description: Group not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Group not found"
+        '410':
+          description: Group invitation has expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Group invitation has expired"
+
+  /api/users/{deviceToken}/groups:
+    get:
+      summary: Get user's joined groups
+      description: Retrieves all groups that a user has joined
+      operationId: getUserGroups
+      parameters:
+        - name: deviceToken
+          in: path
+          required: true
+          description: The device token identifying the user
+          schema:
+            type: string
+            example: "test-device-456"
+      responses:
+        '200':
+          description: User's groups retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGroupsResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "User not found"
+
+  /api/users/{deviceToken}/created-groups:
+    get:
+      summary: Get user's created groups
+      description: Retrieves all groups that a user has created
+      operationId: getUserCreatedGroups
+      parameters:
+        - name: deviceToken
+          in: path
+          required: true
+          description: The device token identifying the user
+          schema:
+            type: string
+            example: "test-device-123"
+      responses:
+        '200':
+          description: User's created groups retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCreatedGroupsResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "User not found"
+
+components:
+  schemas:
+    CreateGroupRequest:
+      type: object
+      required:
+        - deviceToken
+        - modelId
+      properties:
+        deviceToken:
+          type: string
+          description: Unique identifier for the user's device
+          example: "test-device-123"
+        modelId:
+          type: string
+          description: Reference to the 3D model
+          example: "model-xyz-789"
+        title:
+          type: string
+          description: Optional title for the group
+          example: "My First Group"
+        description:
+          type: string
+          description: Optional description of the group
+          example: "Testing group creation"
+        expirationHours:
+          type: integer
+          minimum: 1
+          description: Number of hours until the invitation expires
+          example: 24
+
+    CreateGroupResponse:
+      type: object
+      properties:
+        groupId:
+          type: string
+          format: uuid
+          description: Unique identifier for the created group
+          example: "bdfa13b5-278a-4441-ae1d-feb882f00cbc"
+        inviteCode:
+          type: string
+          pattern: '^[a-z0-9]{8}$'
+          description: Short invitation code for sharing
+          example: "35ihvv61"
+        inviteUrl:
+          type: string
+          format: uri
+          description: Full invitation URL
+          example: "https://coco.co/g/35ihvv61"
+        modelId:
+          type: string
+          description: Reference to the 3D model
+          example: "model-xyz-789"
+        title:
+          type: string
+          nullable: true
+          description: Title of the group
+          example: "My First Group"
+        description:
+          type: string
+          nullable: true
+          description: Description of the group
+          example: "Testing group creation"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the invitation expires
+          example: "2025-08-20T06:51:28.617Z"
+        memberCount:
+          type: integer
+          minimum: 1
+          description: Number of members in the group
+          example: 1
+
+    JoinGroupRequest:
+      type: object
+      required:
+        - deviceToken
+      properties:
+        deviceToken:
+          type: string
+          description: Unique identifier for the user's device
+          example: "test-device-456"
+
+    JoinGroupResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        groupId:
+          type: string
+          format: uuid
+          example: "bdfa13b5-278a-4441-ae1d-feb882f00cbc"
+        modelId:
+          type: string
+          example: "model-xyz-789"
+        title:
+          type: string
+          nullable: true
+          example: "My First Group"
+        description:
+          type: string
+          nullable: true
+          example: "Testing group creation"
+        memberCount:
+          type: integer
+          example: 2
+        message:
+          type: string
+          example: "Successfully joined the group"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a406b354-d43d-47ce-a0a2-34cfdfea51c4"
+        name:
+          type: string
+          nullable: true
+          example: null
+
+    GroupDetails:
+      type: object
+      properties:
+        groupId:
+          type: string
+          format: uuid
+          example: "bdfa13b5-278a-4441-ae1d-feb882f00cbc"
+        inviteCode:
+          type: string
+          pattern: '^[a-z0-9]{8}$'
+          example: "35ihvv61"
+        modelId:
+          type: string
+          example: "model-xyz-789"
+        title:
+          type: string
+          nullable: true
+          example: "My First Group"
+        description:
+          type: string
+          nullable: true
+          example: "Testing group creation"
+        creator:
+          $ref: '#/components/schemas/User'
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-08-20T06:51:28.617Z"
+        memberCount:
+          type: integer
+          example: 2
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+
+    GroupMembership:
+      type: object
+      properties:
+        groupId:
+          type: string
+          format: uuid
+          example: "bdfa13b5-278a-4441-ae1d-feb882f00cbc"
+        modelId:
+          type: string
+          example: "model-xyz-789"
+        inviteCode:
+          type: string
+          pattern: '^[a-z0-9]{8}$'
+          example: "35ihvv61"
+        title:
+          type: string
+          nullable: true
+          example: "My First Group"
+        description:
+          type: string
+          nullable: true
+          example: "Testing group creation"
+        creator:
+          $ref: '#/components/schemas/User'
+        joinedAt:
+          type: string
+          format: date-time
+          example: "2025-08-19T06:51:37.126Z"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-08-20T06:51:28.617Z"
+        memberCount:
+          type: integer
+          example: 2
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+
+    CreatedGroup:
+      type: object
+      properties:
+        groupId:
+          type: string
+          format: uuid
+          example: "bdfa13b5-278a-4441-ae1d-feb882f00cbc"
+        inviteCode:
+          type: string
+          pattern: '^[a-z0-9]{8}$'
+          example: "35ihvv61"
+        modelId:
+          type: string
+          example: "model-xyz-789"
+        title:
+          type: string
+          nullable: true
+          example: "My First Group"
+        description:
+          type: string
+          nullable: true
+          example: "Testing group creation"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-08-20T06:51:28.617Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-08-19T06:51:28.621Z"
+        memberCount:
+          type: integer
+          example: 2
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+
+    UserGroupsResponse:
+      type: object
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupMembership'
+
+    UserCreatedGroupsResponse:
+      type: object
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreatedGroup'
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message describing what went wrong
+          example: "deviceToken and modelId are required"
+
+  headers:
+    CORS:
+      Access-Control-Allow-Origin:
+        schema:
+          type: string
+        description: CORS header allowing all origins
+      Access-Control-Allow-Methods:
+        schema:
+          type: string
+        description: Allowed HTTP methods
+      Access-Control-Allow-Headers:
+        schema:
+          type: string
+        description: Allowed request headers
+
+tags:
+  - name: Groups
+    description: Operations for managing groups and invitations
+  - name: Users
+    description: Operations for retrieving user's group memberships
+  - name: API Info
+    description: General API information
+
+security: []
+
+externalDocs:
+  description: Coco-Pik Backend Documentation
+  url: https://github.com/your-org/coco-pik-backend

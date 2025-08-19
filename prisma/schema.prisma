@@ -13,7 +13,42 @@ datasource db {
 }
 
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
+  id          String  @id @default(uuid())
+  deviceToken String  @unique
+  name        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  createdGroups Group[] @relation("GroupCreator")
+  memberships GroupMember[]
+}
+
+model Group {
+  id          String @id @default(uuid())
+  inviteCode  String @unique // This will be the short code like "asdfhjk181"
+  modelId     String // Reference to the 3D model
+  creatorId   String
+  title       String? // Optional title for the group
+  description String? // Optional description
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  creator     User @relation("GroupCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  members     GroupMember[]
+}
+
+model GroupMember {
+  id        String @id @default(uuid())
+  userId    String
+  groupId   String
+  joinedAt  DateTime @default(now())
+
+  // Relations
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
 }
